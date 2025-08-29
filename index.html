@@ -125,10 +125,10 @@
          */
         function displayUploadMessage(msg, isError = false) {
             if (isError) {
-                uploadErrorMessage.textContent = msg;
+                uploadErrorMessage.innerHTML = msg; // Use innerHTML for potential links
                 uploadStatus.textContent = '';
             } else {
-                uploadStatus.textContent = msg;
+                uploadStatus.innerHTML = msg; // Use innerHTML for potential links
                 uploadErrorMessage.textContent = '';
             }
         }
@@ -228,35 +228,57 @@
             uploadProgressBar.classList.remove('hidden');
 
             try {
-                const { data, error } = await supabase.storage
+                // Upload the file
+                const { data, error: uploadError } = await supabase.storage
                     .from(BUCKET_NAME)
                     .upload(file.name, file, {
                         cacheControl: '3600',
-                        upsert: true, // Overwrite if file with same name exists
-                        // You can add a progress callback here for more granular updates,
-                        // but Supabase JS client doesn't directly expose XHR progress events for .upload()
-                        // A workaround would involve custom XHR or a different client,
-                        // but for simplicity, we'll simulate progress if needed or show 0-100% directly.
+                        upsert: true,
                     });
 
-                if (error) {
-                    displayUploadMessage(`Upload failed: ${error.message}`, true);
-                    console.error('Upload error:', error);
-                } else {
-                    displayUploadMessage(`File "${file.name}" uploaded successfully!`);
-                    updateProgressBar(100);
-                    // Optionally, update the URL to view the newly uploaded file
-                    // window.history.pushState({}, '', `?fileid=${file.name}`);
-                    // fetchAndDisplayFile(file.name);
-                    fileInput.value = ''; // Clear the input
+                if (uploadError) {
+                    displayUploadMessage(`Upload failed: ${uploadError.message}`, true);
+                    console.error('Upload error:', uploadError);
+                    return;
                 }
+
+                // Get the public URL for the newly uploaded file
+                const { data: publicUrlData, error: publicUrlError } = supabase
+                    .storage
+                    .from(BUCKET_NAME)
+                    .getPublicUrl(file.name);
+
+                if (publicUrlError) {
+                    displayUploadMessage(`File uploaded, but failed to get public URL: ${publicUrlError.message}`, true);
+                    console.error('Error getting public URL after upload:', publicUrlError);
+                    return;
+                }
+
+                if (!publicUrlData || !publicUrlData.publicUrl) {
+                    displayUploadMessage('File uploaded, but public URL not available.', true);
+                    return;
+                }
+
+                const uploadedFilePublicUrl = publicUrlData.publicUrl;
+                const githubPagesBaseUrl = window.location.origin + window.location.pathname.replace(/\/$/, ''); // Get current GitHub Pages base URL
+                const cdnLink = `${githubPagesBaseUrl}?fileid=${encodeURIComponent(file.name)}`;
+
+                displayUploadMessage(`
+                    File "<span class="font-bold">${file.name}</span>" uploaded successfully! 🎉<br>
+                    <div class="mt-2 text-sm">
+                        <p>Direct Link: <a href="${uploadedFilePublicUrl}" target="_blank" class="text-primary hover:underline break-all">${uploadedFilePublicUrl}</a></p>
+                        <p class="mt-1">CDN Link: <a href="${cdnLink}" target="_blank" class="text-primary hover:underline break-all">${cdnLink}</a></p>
+                    </div>
+                `);
+                updateProgressBar(100);
+                fileInput.value = ''; // Clear the input
+
             } catch (err) {
                 displayUploadMessage(`An unexpected error occurred during upload: ${err.message}`, true);
                 console.error('Unexpected upload error:', err);
             } finally {
                 uploadButton.disabled = false;
-                // ProgressBar will hide after a delay if 100% was reached
-                if (parseInt(progressIndicator.style.width) < 100) { // If not 100%, hide immediately
+                if (parseInt(progressIndicator.style.width) < 100) {
                     uploadProgressBar.classList.add('hidden');
                 }
             }
