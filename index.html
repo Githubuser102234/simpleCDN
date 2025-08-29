@@ -126,7 +126,7 @@
         // --- Supabase Configuration ---
         // REPLACE WITH YOUR ACTUAL SUPABASE PROJECT URL AND ANON KEY
         const SUPABASE_URL = 'https://uziorsydukhuuaraybhn.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6aW9yc3lkdWwodXN0eHVhcmF5YmhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0MzEwMzksImV4cCI6MjA3MjAwNzAzOX0.wIj0YT9R5IggLH3nnVKjg-VCyrztyHHPsFvFFdGyypA';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6aW9yc3lkdWtodXVhcmF5YmhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0MzEwMzksImV4cCI6MjA3MjAwNzAzOX0.wIj0YT9R5IggLH3nnVKjg-VCyrztyHHPsFvFFdGyypA';
         const BUCKET_NAME = 'files'; // As specified in the prompt
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -367,20 +367,14 @@
             uploadProgressBar.classList.remove('hidden');
 
             try {
-                // Generate a unique file name to prevent collisions
-                const originalFileName = file.name;
-                const fileExtension = originalFileName.split('.').pop();
-                const baseFileName = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
-                // Sanitize base file name for URL friendliness
-                const sanitizedBaseFileName = baseFileName.replace(/[^a-zA-Z0-9-]/g, '-').replace(/--+/g, '-').replace(/^-/, '').replace(/-\s*$/, '').toLowerCase();
-                const uniqueId = crypto.randomUUID().split('-')[0]; // Get a short random ID
-                const uniqueFileName = `${sanitizedBaseFileName}-${uniqueId}.${fileExtension}`;
-
+                // The `upload` method in the Supabase client doesn't directly expose real-time byte progress.
+                // For very large files, a more advanced implementation would involve `createUploadResumable`
+                // or a custom approach with `fetch` and progress events, but for typical CDN files, this is sufficient.
                 const { data, error } = await supabase.storage
                     .from(BUCKET_NAME)
-                    .upload(uniqueFileName, file, { // Use the unique filename here
+                    .upload(file.name, file, {
                         cacheControl: '3600', // Cache for 1 hour on the CDN
-                        upsert: false, // Set to false since we are using unique names, prevents accidental overwrite of *different* unique files
+                        upsert: true, // Overwrite if file with same name exists
                     });
 
                 if (error) {
@@ -388,10 +382,10 @@
                     console.error('Upload error:', error);
                 } else {
                     updateProgressBar(100);
-                    displayUploadMessage(`File "${uniqueFileName}" uploaded successfully! Redirecting...`);
+                    displayUploadMessage(`File "${file.name}" uploaded successfully! Redirecting...`);
                     // Anti-lag enhancement: Delay redirect slightly to ensure message is seen by the user
                     setTimeout(() => {
-                        window.location.href = `${REDIRECT_BASE_URL}${uniqueFileName}`; // Redirect with the unique filename
+                        window.location.href = `${REDIRECT_BASE_URL}${file.name}`;
                     }, 1000); // 1-second delay
                 }
             } catch (err) {
@@ -421,4 +415,4 @@
         });
     </script>
 </body>
-</html> 
+</html>
