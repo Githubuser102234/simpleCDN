@@ -60,8 +60,7 @@
 
         <h2 class="text-xl font-semibold mb-3 text-gray-800">View CDN File</h2>
         <div id="file-display" class="mt-4">
-            <!-- File content will be loaded here -->
-        </div>
+            </div>
         <p id="message" class="text-lg text-gray-600 mt-6"></p>
         <p id="error-message" class="text-red-500 font-medium mt-4"></p>
 
@@ -92,6 +91,10 @@
         const fileDisplay = document.getElementById('file-display');
         const messageElement = document.getElementById('message');
         const errorMessage = document.getElementById('error-message');
+        const fileIdFromURL = getQueryParam('fileid');
+
+        // URL to redirect to after successful upload
+        const REDIRECT_BASE_URL = 'https://githubuser102234.github.io/simpleCDN/?fileid=';
 
         /**
          * Parses the URL for a specific query parameter.
@@ -125,10 +128,10 @@
          */
         function displayUploadMessage(msg, isError = false) {
             if (isError) {
-                uploadErrorMessage.innerHTML = msg; // Use innerHTML for potential links
+                uploadErrorMessage.textContent = msg;
                 uploadStatus.textContent = '';
             } else {
-                uploadStatus.innerHTML = msg; // Use innerHTML for potential links
+                uploadStatus.textContent = msg;
                 uploadErrorMessage.textContent = '';
             }
         }
@@ -175,36 +178,18 @@
                 const publicUrl = data.publicUrl;
                 displayCdnMessage(`File loaded! Access it here: <a href="${publicUrl}" class="text-primary hover:underline" target="_blank">${fileId}</a>`);
 
-                // Attempt to display common media types directly
-                const fileExtension = fileId.split('.').pop().toLowerCase();
-                if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(fileExtension)) {
-                    const img = document.createElement('img');
-                    img.src = publicUrl;
-                    img.alt = fileId;
-                    img.className = 'max-w-full h-auto mx-auto my-4 rounded-md shadow-md';
-                    img.onerror = () => displayCdnMessage('Failed to load image. It might be corrupted or not an image file.', true);
-                    fileDisplay.appendChild(img);
-                } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
-                    const video = document.createElement('video');
-                    video.src = publicUrl;
-                    video.controls = true;
-                    video.className = 'max-w-full h-auto mx-auto my-4 rounded-md shadow-md';
-                    fileDisplay.appendChild(video);
-                } else if (['mp3', 'wav', 'aac'].includes(fileExtension)) {
-                    const audio = document.createElement('audio');
-                    audio.src = publicUrl;
-                    audio.controls = true;
-                    audio.className = 'w-full my-4';
-                    fileDisplay.appendChild(audio);
-                } else if (['pdf'].includes(fileExtension)) {
-                    const iframe = document.createElement('iframe');
-                    iframe.src = publicUrl;
-                    iframe.className = 'w-full h-96 my-4 border rounded-md shadow-md';
-                    fileDisplay.appendChild(iframe);
-                } else {
-                    // For other file types, provide a direct download link
-                    displayCdnMessage(`This file type cannot be displayed directly. Please download it: <a href="${publicUrl}" download="${fileId}" class="text-primary hover:underline font-bold" target="_blank">Download ${fileId}</a>`);
+                // Fetch the file content as text to display it raw
+                const response = await fetch(publicUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+                const rawText = await response.text();
+
+                // Display the raw content in a <pre> tag
+                const pre = document.createElement('pre');
+                pre.className = 'w-full h-96 my-4 p-4 text-left border rounded-md shadow-md bg-gray-800 text-white overflow-auto';
+                pre.textContent = rawText;
+                fileDisplay.appendChild(pre);
 
             } catch (err) {
                 displayCdnMessage(`An unexpected error occurred: ${err.message}`, true);
@@ -228,51 +213,24 @@
             uploadProgressBar.classList.remove('hidden');
 
             try {
-                // Upload the file
-                const { data, error: uploadError } = await supabase.storage
+                const { data, error } = await supabase.storage
                     .from(BUCKET_NAME)
                     .upload(file.name, file, {
                         cacheControl: '3600',
-                        upsert: true,
+                        upsert: true, // Overwrite if file with same name exists
                     });
 
-                if (uploadError) {
-                    displayUploadMessage(`Upload failed: ${uploadError.message}`, true);
-                    console.error('Upload error:', uploadError);
-                    return;
+                if (error) {
+                    displayUploadMessage(`Upload failed: ${error.message}`, true);
+                    console.error('Upload error:', error);
+                } else {
+                    updateProgressBar(100);
+                    displayUploadMessage(`File "${file.name}" uploaded successfully! Redirecting...`);
+                    // Redirect the user to the new URL
+                    setTimeout(() => {
+                        window.location.href = `${REDIRECT_BASE_URL}${file.name}`;
+                    }, 1000); // 1-second delay for the user to see the success message
                 }
-
-                // Get the public URL for the newly uploaded file
-                const { data: publicUrlData, error: publicUrlError } = supabase
-                    .storage
-                    .from(BUCKET_NAME)
-                    .getPublicUrl(file.name);
-
-                if (publicUrlError) {
-                    displayUploadMessage(`File uploaded, but failed to get public URL: ${publicUrlError.message}`, true);
-                    console.error('Error getting public URL after upload:', publicUrlError);
-                    return;
-                }
-
-                if (!publicUrlData || !publicUrlData.publicUrl) {
-                    displayUploadMessage('File uploaded, but public URL not available.', true);
-                    return;
-                }
-
-                const uploadedFilePublicUrl = publicUrlData.publicUrl;
-                const githubPagesBaseUrl = window.location.origin + window.location.pathname.replace(/\/$/, ''); // Get current GitHub Pages base URL
-                const cdnLink = `${githubPagesBaseUrl}?fileid=${encodeURIComponent(file.name)}`;
-
-                displayUploadMessage(`
-                    File "<span class="font-bold">${file.name}</span>" uploaded successfully! 🎉<br>
-                    <div class="mt-2 text-sm">
-                        <p>Direct Link: <a href="${uploadedFilePublicUrl}" target="_blank" class="text-primary hover:underline break-all">${uploadedFilePublicUrl}</a></p>
-                        <p class="mt-1">CDN Link: <a href="${cdnLink}" target="_blank" class="text-primary hover:underline break-all">${cdnLink}</a></p>
-                    </div>
-                `);
-                updateProgressBar(100);
-                fileInput.value = ''; // Clear the input
-
             } catch (err) {
                 displayUploadMessage(`An unexpected error occurred during upload: ${err.message}`, true);
                 console.error('Unexpected upload error:', err);
@@ -290,7 +248,6 @@
         // --- Main execution for CDN view ---
         document.addEventListener('DOMContentLoaded', () => {
             const fileId = getQueryParam('fileid');
-
             if (fileId) {
                 fetchAndDisplayFile(fileId);
             } else {
