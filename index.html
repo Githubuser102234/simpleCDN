@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase CDN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#16a34a', // A nice green
+                        secondary: '#d1d5db', // Light gray
+                        dark: '#1f2937', // Dark gray
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light background */
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4 bg-gray-100 text-dark">
+    <div class="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full text-center">
+        <h1 class="text-3xl font-bold text-primary mb-6">Supabase CDN 🚀</h1>
+
+        <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <h2 class="text-xl font-semibold mb-3 text-gray-800">Upload a File</h2>
+            <input type="file" id="file-input" class="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-primary file:text-white
+                hover:file:bg-green-700 cursor-pointer
+                focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50"
+            />
+            <button id="upload-button" class="mt-4 bg-primary text-white font-bold py-2 px-6 rounded-full
+                                          hover:bg-green-700 transition-colors duration-200
+                                          focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50
+                                          disabled:opacity-50 disabled:cursor-not-allowed">
+                Upload to Storage
+            </button>
+            <div id="upload-status" class="mt-4 text-sm text-gray-600"></div>
+            <div id="upload-progress-bar" class="w-full bg-gray-200 rounded-full h-2.5 mt-2 hidden">
+                <div class="bg-primary h-2.5 rounded-full" style="width: 0%" id="progress-indicator"></div>
+            </div>
+            <p id="upload-error-message" class="text-red-500 font-medium mt-2"></p>
+        </div>
+
+        <hr class="my-8 border-gray-200">
+
+        <h2 class="text-xl font-semibold mb-3 text-gray-800">View CDN File</h2>
+        <div id="file-display" class="mt-4">
+            <!-- File content will be loaded here -->
+        </div>
+        <p id="message" class="text-lg text-gray-600 mt-6"></p>
+        <p id="error-message" class="text-red-500 font-medium mt-4"></p>
+
+        <div class="mt-8 text-sm text-gray-500">
+            <p>Powered by Supabase Storage and GitHub Pages.</p>
+            <p>To view, append <code class="bg-gray-200 px-1 rounded">?fileid=your_file_name.ext</code> to the URL.</p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+        // --- Supabase Configuration ---
+        // REPLACE WITH YOUR ACTUAL SUPABASE PROJECT URL AND ANON KEY
+        const SUPABASE_URL = 'https://uziorsydukhuuaraybhn.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6aW9yc3lkdWtodXVhcmF5YmhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0MzEwMzksImV4cCI6MjA3MjAwNzAzOX0.wIj0YT9R5IggLH3nnVKjg-VCyrztyHHPsFvFFdGyypA';
+        const BUCKET_NAME = 'files'; // As specified in the prompt
+
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const fileInput = document.getElementById('file-input');
+        const uploadButton = document.getElementById('upload-button');
+        const uploadStatus = document.getElementById('upload-status');
+        const uploadErrorMessage = document.getElementById('upload-error-message');
+        const uploadProgressBar = document.getElementById('upload-progress-bar');
+        const progressIndicator = document.getElementById('progress-indicator');
+
+        const fileDisplay = document.getElementById('file-display');
+        const messageElement = document.getElementById('message');
+        const errorMessage = document.getElementById('error-message');
+
+        /**
+         * Parses the URL for a specific query parameter.
+         * @param {string} param The name of the parameter to find.
+         * @returns {string | null} The value of the parameter, or null if not found.
+         */
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        /**
+         * Displays a message on the UI for the CDN view section.
+         * @param {string} msg The message to display.
+         * @param {boolean} isError If true, displays as an error.
+         */
+        function displayCdnMessage(msg, isError = false) {
+            if (isError) {
+                errorMessage.innerHTML = msg; // Use innerHTML for potential links
+                messageElement.textContent = '';
+            } else {
+                messageElement.innerHTML = msg; // Use innerHTML for potential links
+                errorMessage.textContent = '';
+            }
+        }
+
+        /**
+         * Displays a message on the UI for the upload section.
+         * @param {string} msg The message to display.
+         * @param {boolean} isError If true, displays as an error.
+         */
+        function displayUploadMessage(msg, isError = false) {
+            if (isError) {
+                uploadErrorMessage.textContent = msg;
+                uploadStatus.textContent = '';
+            } else {
+                uploadStatus.textContent = msg;
+                uploadErrorMessage.textContent = '';
+            }
+        }
+
+        /**
+         * Updates the progress bar.
+         * @param {number} percentage The percentage of upload complete (0-100).
+         */
+        function updateProgressBar(percentage) {
+            uploadProgressBar.classList.remove('hidden');
+            progressIndicator.style.width = `${percentage}%`;
+            displayUploadMessage(`Uploading... ${percentage}%`);
+            if (percentage === 100) {
+                setTimeout(() => uploadProgressBar.classList.add('hidden'), 1000); // Hide after completion
+            }
+        }
+
+        /**
+         * Fetches and displays the file from Supabase Storage.
+         * @param {string} fileId The ID/path of the file in the bucket.
+         */
+        async function fetchAndDisplayFile(fileId) {
+            displayCdnMessage(`Loading file: ${fileId}...`);
+            fileDisplay.innerHTML = ''; // Clear previous content
+
+            try {
+                // Generate a public URL for the file
+                const { data, error } = supabase
+                    .storage
+                    .from(BUCKET_NAME)
+                    .getPublicUrl(fileId);
+
+                if (error) {
+                    displayCdnMessage(`Error generating URL: ${error.message}`, true);
+                    console.error('Error generating public URL:', error);
+                    return;
+                }
+
+                if (!data || !data.publicUrl) {
+                    displayCdnMessage('File not found or public URL not available.', true);
+                    return;
+                }
+
+                const publicUrl = data.publicUrl;
+                displayCdnMessage(`File loaded! Access it here: <a href="${publicUrl}" class="text-primary hover:underline" target="_blank">${fileId}</a>`);
+
+                // Attempt to display common media types directly
+                const fileExtension = fileId.split('.').pop().toLowerCase();
+                if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(fileExtension)) {
+                    const img = document.createElement('img');
+                    img.src = publicUrl;
+                    img.alt = fileId;
+                    img.className = 'max-w-full h-auto mx-auto my-4 rounded-md shadow-md';
+                    img.onerror = () => displayCdnMessage('Failed to load image. It might be corrupted or not an image file.', true);
+                    fileDisplay.appendChild(img);
+                } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
+                    const video = document.createElement('video');
+                    video.src = publicUrl;
+                    video.controls = true;
+                    video.className = 'max-w-full h-auto mx-auto my-4 rounded-md shadow-md';
+                    fileDisplay.appendChild(video);
+                } else if (['mp3', 'wav', 'aac'].includes(fileExtension)) {
+                    const audio = document.createElement('audio');
+                    audio.src = publicUrl;
+                    audio.controls = true;
+                    audio.className = 'w-full my-4';
+                    fileDisplay.appendChild(audio);
+                } else if (['pdf'].includes(fileExtension)) {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = publicUrl;
+                    iframe.className = 'w-full h-96 my-4 border rounded-md shadow-md';
+                    fileDisplay.appendChild(iframe);
+                } else {
+                    // For other file types, provide a direct download link
+                    displayCdnMessage(`This file type cannot be displayed directly. Please download it: <a href="${publicUrl}" download="${fileId}" class="text-primary hover:underline font-bold" target="_blank">Download ${fileId}</a>`);
+                }
+
+            } catch (err) {
+                displayCdnMessage(`An unexpected error occurred: ${err.message}`, true);
+                console.error('Unexpected error:', err);
+            }
+        }
+
+        /**
+         * Handles the file upload to Supabase Storage.
+         */
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) {
+                displayUploadMessage('Please select a file to upload.', true);
+                return;
+            }
+
+            uploadButton.disabled = true;
+            displayUploadMessage('Starting upload...');
+            updateProgressBar(0);
+            uploadProgressBar.classList.remove('hidden');
+
+            try {
+                const { data, error } = await supabase.storage
+                    .from(BUCKET_NAME)
+                    .upload(file.name, file, {
+                        cacheControl: '3600',
+                        upsert: true, // Overwrite if file with same name exists
+                        // You can add a progress callback here for more granular updates,
+                        // but Supabase JS client doesn't directly expose XHR progress events for .upload()
+                        // A workaround would involve custom XHR or a different client,
+                        // but for simplicity, we'll simulate progress if needed or show 0-100% directly.
+                    });
+
+                if (error) {
+                    displayUploadMessage(`Upload failed: ${error.message}`, true);
+                    console.error('Upload error:', error);
+                } else {
+                    displayUploadMessage(`File "${file.name}" uploaded successfully!`);
+                    updateProgressBar(100);
+                    // Optionally, update the URL to view the newly uploaded file
+                    // window.history.pushState({}, '', `?fileid=${file.name}`);
+                    // fetchAndDisplayFile(file.name);
+                    fileInput.value = ''; // Clear the input
+                }
+            } catch (err) {
+                displayUploadMessage(`An unexpected error occurred during upload: ${err.message}`, true);
+                console.error('Unexpected upload error:', err);
+            } finally {
+                uploadButton.disabled = false;
+                // ProgressBar will hide after a delay if 100% was reached
+                if (parseInt(progressIndicator.style.width) < 100) { // If not 100%, hide immediately
+                    uploadProgressBar.classList.add('hidden');
+                }
+            }
+        }
+
+        // --- Event Listeners ---
+        uploadButton.addEventListener('click', uploadFile);
+
+        // --- Main execution for CDN view ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileId = getQueryParam('fileid');
+
+            if (fileId) {
+                fetchAndDisplayFile(fileId);
+            } else {
+                displayCdnMessage('Please specify a file using the <code class="bg-gray-200 px-1 rounded">?fileid=</code> parameter in the URL or upload one above.');
+            }
+        });
+    </script>
+</body>
+</html>
