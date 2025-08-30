@@ -75,13 +75,59 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        /* Styles for embedded mode */
+        body.is-embedded {
+            background-color: transparent; /* Transparent background for embeds */
+            display: block; /* Remove flex on body */
+            min-height: auto; /* No min-height */
+            padding: 0;
+            margin: 0;
+            overflow: hidden; /* Prevent body scroll in embed mode if content fits */
+        }
+
+        body.is-embedded .main-container {
+            padding: 0;
+            box-shadow: none;
+            background-color: transparent;
+            max-width: none;
+            width: 100%;
+            height: 100%; /* Ensure it takes full height in embed mode */
+            text-align: left; /* Remove center text alignment for better embed look */
+        }
+
+        /* Elements to hide in embedded mode */
+        body.is-embedded .upload-section,
+        body.is-embedded .info-section,
+        body.is-embedded .file-controls,
+        body.is-embedded h1,
+        body.is-embedded hr,
+        body.is-embedded .view-cdn-title,
+        body.is-embedded #message,
+        body.is-embedded #error-message
+        {
+            display: none !important; /* Force hide these elements */
+        }
+
+        body.is-embedded .embedded-content {
+            margin-top: 0;
+            margin-bottom: 0;
+            height: 100vh; /* Make embedded content fill viewport height */
+            border-radius: 0; /* No rounded corners for embed to blend in */
+            box-shadow: none;
+        }
+        body.is-embedded .file-display {
+            min-height: 100vh; /* Ensure file display takes full height */
+            justify-content: flex-start; /* Align content to start in embed mode */
+            align-items: flex-start; /* Align content to start in embed mode */
+        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4 bg-gray-100 text-dark">
-    <div class="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full text-center">
+    <div id="main-content-wrapper" class="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full text-center main-container">
         <h1 class="text-3xl font-bold text-primary mb-6">Supabase CDN 🚀</h1>
 
-        <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
+        <div class="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50 upload-section">
             <h2 class="text-xl font-semibold mb-3 text-gray-800">Upload a File</h2>
             <input type="file" id="file-input" class="block w-full text-sm text-gray-500
                 file:mr-4 file:py-2 file:px-4
@@ -106,15 +152,25 @@
 
         <hr class="my-8 border-gray-200">
 
-        <h2 class="text-xl font-semibold mb-3 text-gray-800">View CDN File</h2>
-        <div id="file-display" class="mt-4 flex flex-col items-center justify-center min-h-[300px]">
+        <h2 class="text-xl font-semibold mb-3 text-gray-800 view-cdn-title">View CDN File</h2>
+        <div id="file-display" class="mt-4 flex flex-col items-center justify-center min-h-[300px] file-display">
             <!-- File content will be embedded here -->
             <div id="loader" class="loader hidden"></div>
         </div>
         <p id="message" class="text-lg text-gray-600 mt-6"></p>
         <p id="error-message" class="text-red-500 font-medium mt-4"></p>
 
-        <div class="mt-8 text-sm text-gray-500">
+        <div id="share-embed-section" class="mt-4 file-controls">
+            <button id="share-embed-button" class="bg-blue-500 text-white font-bold py-2 px-6 rounded-full
+                                               hover:bg-blue-700 transition-colors duration-200
+                                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
+                                               disabled:opacity-50 disabled:cursor-not-allowed hidden">
+                Share Embed Link
+            </button>
+            <p id="share-status-message" class="text-sm text-gray-600 mt-2 hidden"></p>
+        </div>
+
+        <div class="mt-8 text-sm text-gray-500 info-section footer-info">
             <p>Powered by Supabase Storage and GitHub Pages.</p>
             <p>To view, append <code class="bg-gray-200 px-1 rounded">?fileid=your_random_id</code> to the URL.</p>
         </div>
@@ -143,10 +199,15 @@
         const messageElement = document.getElementById('message');
         const errorMessage = document.getElementById('error-message');
         const fileIdFromURL = getQueryParam('fileid');
+        const embedMode = getQueryParam('embed') === 'true'; // New: check for embed mode
+
+        const shareEmbedButton = document.getElementById('share-embed-button');
+        const shareStatusMessage = document.getElementById('share-status-message');
+        const mainContentWrapper = document.getElementById('main-content-wrapper');
 
         // URL to redirect to after successful upload
         // Note: This base URL should not include the ?fileid= part, as we add it dynamically.
-        const REDIRECT_BASE_URL = 'https://githubuser102234.github.io/simpleCDN/';
+        const REDIRECT_BASE_URL = window.location.origin + window.location.pathname; // Dynamically get base URL
 
         /**
          * Parses the URL for a specific query parameter.
@@ -164,6 +225,8 @@
          * @param {boolean} isError If true, displays as an error.
          */
         function displayCdnMessage(msg, isError = false) {
+            if (embedMode) return; // Do not display general messages in embed mode
+
             if (isError) {
                 errorMessage.innerHTML = msg; // Use innerHTML for potential links
                 messageElement.textContent = '';
@@ -179,6 +242,8 @@
          * @param {boolean} isError If true, displays as an error.
          */
         function displayUploadMessage(msg, isError = false) {
+            if (embedMode) return; // Do not display upload messages in embed mode
+
             if (isError) {
                 uploadErrorMessage.textContent = msg;
                 uploadStatus.textContent = '';
@@ -193,6 +258,8 @@
          * @param {number} percentage The percentage of upload complete (0-100).
          */
         function updateProgressBar(percentage) {
+            if (embedMode) return; // Do not update progress bar in embed mode
+
             uploadProgressBar.classList.remove('hidden');
             progressIndicator.style.width = `${percentage}%`;
             displayUploadMessage(`Uploading... ${percentage}%`);
@@ -316,7 +383,12 @@
                     .single();
 
                 if (dbError || !fileRecord) {
-                    displayCdnMessage(`File with ID "${randomIdFromUrl}" not found in database.`, true);
+                    // In embed mode, a more concise error is better.
+                    if (embedMode) {
+                        fileDisplay.innerHTML = '<p class="text-red-500 font-medium p-4">Error: File not found.</p>';
+                    } else {
+                        displayCdnMessage(`File with ID "${randomIdFromUrl}" not found in database.`, true);
+                    }
                     console.error('Database lookup error:', dbError);
                     loader.classList.add('hidden');
                     return;
@@ -332,14 +404,22 @@
                     .getPublicUrl(actualStoragePath);
 
                 if (publicUrlError) {
-                    displayCdnMessage(`Error generating URL for file: ${publicUrlError.message}`, true);
+                    if (embedMode) {
+                        fileDisplay.innerHTML = `<p class="text-red-500 font-medium p-4">Error: Could not retrieve file.</p>`;
+                    } else {
+                        displayCdnMessage(`Error generating URL for file: ${publicUrlError.message}`, true);
+                    }
                     console.error('Error generating public URL:', publicUrlError);
                     loader.classList.add('hidden');
                     return;
                 }
 
                 if (!publicUrlData || !publicUrlData.publicUrl) {
-                    displayCdnMessage('File not found in storage or public URL not available.', true);
+                    if (embedMode) {
+                        fileDisplay.innerHTML = `<p class="text-red-500 font-medium p-4">Error: File not available.</p>`;
+                    } else {
+                        displayCdnMessage('File not found in storage or public URL not available.', true);
+                    }
                     loader.classList.add('hidden');
                     return;
                 }
@@ -361,8 +441,17 @@
                     embedFile(publicUrl, originalFilename);
                 }
 
+                // Show share embed button if a file is successfully displayed and not in embed mode
+                if (!embedMode) {
+                    shareEmbedButton.classList.remove('hidden');
+                }
+
             } catch (err) {
-                displayCdnMessage(`An unexpected error occurred: ${err.message}`, true);
+                if (embedMode) {
+                    fileDisplay.innerHTML = `<p class="text-red-500 font-medium p-4">Error: An unexpected issue occurred.</p>`;
+                } else {
+                    displayCdnMessage(`An unexpected error occurred: ${err.message}`, true);
+                }
                 console.error('Unexpected error:', err);
             } finally {
                 loader.classList.add('hidden'); // Ensure loader is hidden after attempt
@@ -448,17 +537,75 @@
             }
         }
 
+        /**
+         * Copies text to the clipboard.
+         * @param {string} text The text to copy.
+         */
+        function copyToClipboard(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed'; // Avoid scrolling to bottom
+            textarea.style.left = '-9999px'; // Move off-screen
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                return true;
+            } catch (err) {
+                console.error('Unable to copy to clipboard', err);
+                return false;
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        }
+
+
         // --- Event Listeners ---
         uploadButton.addEventListener('click', uploadFile);
 
+        shareEmbedButton.addEventListener('click', () => {
+            if (fileIdFromURL) {
+                const embedLink = `${REDIRECT_BASE_URL}?fileid=${fileIdFromURL}&embed=true`;
+                if (copyToClipboard(embedLink)) {
+                    shareStatusMessage.textContent = 'Embed link copied to clipboard!';
+                    shareStatusMessage.classList.remove('hidden');
+                    setTimeout(() => {
+                        shareStatusMessage.classList.add('hidden');
+                        shareStatusMessage.textContent = '';
+                    }, 3000); // Hide message after 3 seconds
+                } else {
+                    shareStatusMessage.textContent = 'Failed to copy link. Please copy manually: ' + embedLink;
+                    shareStatusMessage.classList.remove('hidden');
+                }
+            } else {
+                shareStatusMessage.textContent = 'No file ID found to create an embed link.';
+                shareStatusMessage.classList.remove('hidden');
+            }
+        });
+
+
         // --- Main execution for CDN view ---
         document.addEventListener('DOMContentLoaded', () => {
-            const fileId = getQueryParam('fileid');
-            if (fileId) {
-                fetchAndDisplayFile(fileId);
-            } else {
+            if (embedMode) {
+                document.body.classList.add('is-embedded');
+                // The main content wrapper also needs to be adjusted
+                // We dynamically added 'main-container' class to the wrapper.
+                mainContentWrapper.classList.remove('bg-white', 'rounded-lg', 'shadow-xl', 'p-8', 'max-w-2xl', 'w-full', 'text-center');
+                // Ensure the loader is always hidden if fileId is not present even in embed mode
+                if (!fileIdFromURL) {
+                    loader.classList.add('hidden');
+                }
+            }
+
+            if (fileIdFromURL) {
+                fetchAndDisplayFile(fileIdFromURL);
+            } else if (!embedMode) { // Only show this message if not in embed mode and no fileId
                 displayCdnMessage('Please specify a file using the <code class="bg-gray-200 px-1 rounded">?fileid=your_random_id</code> parameter in the URL or upload one above.');
                 loader.classList.add('hidden'); // Hide loader if no fileId is present
+            } else { // In embed mode but no fileId, display a specific error
+                loader.classList.add('hidden'); // Hide loader immediately
+                fileDisplay.innerHTML = '<p class="text-red-500 font-medium p-4">Error: No file specified for embedding.</p>';
             }
         });
     </script>
