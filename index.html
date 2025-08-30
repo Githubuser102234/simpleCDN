@@ -75,52 +75,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-
-        /* Styles for embedded mode */
-        body.is-embedded {
-            background-color: transparent; /* Transparent background for embeds */
-            display: block; /* Remove flex on body */
-            min-height: auto; /* No min-height */
-            padding: 0;
-            margin: 0;
-            overflow: hidden; /* Prevent body scroll in embed mode if content fits */
-        }
-
-        body.is-embedded .main-container {
-            padding: 0;
-            box-shadow: none;
-            background-color: transparent;
-            max-width: none;
-            width: 100%;
-            height: 100%; /* Ensure it takes full height in embed mode */
-            text-align: left; /* Remove center text alignment for better embed look */
-        }
-
-        /* Elements to hide in embedded mode */
-        body.is-embedded .upload-section,
-        body.is-embedded .info-section,
-        body.is-embedded .file-controls,
-        body.is-embedded h1,
-        body.is-embedded hr,
-        body.is-embedded .view-cdn-title,
-        body.is-embedded #message,
-        body.is-embedded #error-message
-        {
-            display: none !important; /* Force hide these elements */
-        }
-
-        body.is-embedded .embedded-content {
-            margin-top: 0;
-            margin-bottom: 0;
-            height: 100vh; /* Make embedded content fill viewport height */
-            border-radius: 0; /* No rounded corners for embed to blend in */
-            box-shadow: none;
-        }
-        body.is-embedded .file-display {
-            min-height: 100vh; /* Ensure file display takes full height */
-            justify-content: flex-start; /* Align content to start in embed mode */
-            align-items: flex-start; /* Align content to start in embed mode */
-        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4 bg-gray-100 text-dark">
@@ -182,7 +136,7 @@
         // --- Supabase Configuration ---
         // REPLACE WITH YOUR ACTUAL SUPABASE PROJECT URL AND ANON KEY
         const SUPABASE_URL = 'https://uziorsydukhuuaraybhn.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6aW9yc3lkdWtodXVhcmF5YmhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0MzEwMzksImV4cCI6MjA3MjAwNzAzOX0.wIj0YT9R5IggLH3nnVKjg-VCyrztyHHPsFvFFdGyypA';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6aW9yc3lkdWwodHUlNmd1YnJheWJobiIsInJvbGUiOiJbY1bm5b24iLCJpYXQiOjE3NTY0MzEwMzksImV4cCI6MjA3MjAwNzAzOX0.wIj0YT9R5IggLH3nnVKjg-VCyrztyHHPsFvFFdGyypA';
         const BUCKET_NAME = 'files'; // As specified in the prompt
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -225,7 +179,8 @@
          * @param {boolean} isError If true, displays as an error.
          */
         function displayCdnMessage(msg, isError = false) {
-            if (embedMode) return; // Do not display general messages in embed mode
+            // In embed mode, we don't display these messages on the page itself
+            if (embedMode) return;
 
             if (isError) {
                 errorMessage.innerHTML = msg; // Use innerHTML for potential links
@@ -295,6 +250,7 @@
 
         /**
          * Embeds the file content into the display area based on its type.
+         * This function is only called when NOT in embedMode.
          * @param {string} publicUrl The public URL of the file.
          * @param {string} originalFilename The original name of the file (to infer type).
          * @param {string | null} rawTextContent Optional: Raw text content for text files.
@@ -367,12 +323,11 @@
 
         /**
          * Fetches and displays the file from Supabase Storage using the random_id from the URL.
+         * If in embedMode, it redirects directly to the public file URL.
          * @param {string} randomIdFromUrl The random ID from the URL (e.g., from ?fileid=).
          */
         async function fetchAndDisplayFile(randomIdFromUrl) {
-            displayCdnMessage(`Loading file with ID: ${randomIdFromUrl}...`);
-            fileDisplay.innerHTML = ''; // Clear previous content
-            loader.classList.remove('hidden'); // Show loader
+            loader.classList.remove('hidden'); // Show loader immediately
 
             try {
                 // Step 1: Query the 'files' table to get the actual storage path and original filename
@@ -383,9 +338,9 @@
                     .single();
 
                 if (dbError || !fileRecord) {
-                    // In embed mode, a more concise error is better.
                     if (embedMode) {
-                        fileDisplay.innerHTML = '<p class="text-red-500 font-medium p-4">Error: File not found.</p>';
+                        // In embed mode, a very minimal error message if direct redirect fails
+                        document.body.innerHTML = '<p style="color:red;">Error: File not found.</p>';
                     } else {
                         displayCdnMessage(`File with ID "${randomIdFromUrl}" not found in database.`, true);
                     }
@@ -405,7 +360,7 @@
 
                 if (publicUrlError) {
                     if (embedMode) {
-                        fileDisplay.innerHTML = `<p class="text-red-500 font-medium p-4">Error: Could not retrieve file.</p>`;
+                        document.body.innerHTML = `<p style="color:red;">Error: Could not retrieve file.</p>`;
                     } else {
                         displayCdnMessage(`Error generating URL for file: ${publicUrlError.message}`, true);
                     }
@@ -416,15 +371,24 @@
 
                 if (!publicUrlData || !publicUrlData.publicUrl) {
                     if (embedMode) {
-                        fileDisplay.innerHTML = `<p class="text-red-500 font-medium p-4">Error: File not available.</p>`;
+                        document.body.innerHTML = `<p style="color:red;">Error: File not available.</p>`;
                     } else {
                         displayCdnMessage('File not found in storage or public URL not available.', true);
                     }
+                    console.error('File not found in storage or public URL not available.');
                     loader.classList.add('hidden');
                     return;
                 }
 
                 const publicUrl = publicUrlData.publicUrl;
+
+                if (embedMode) {
+                    // Critical change: Redirect directly to the file for embedding
+                    window.location.replace(publicUrl);
+                    return; // Stop further execution
+                }
+
+                // Normal (non-embed) mode: display the file within the page
                 displayCdnMessage(`File loaded: ${originalFilename}! Access it here: <a href="${publicUrl}" class="text-primary hover:underline" target="_blank">Download/View ${originalFilename}</a>`);
 
                 const fileCategory = getFileType(originalFilename);
@@ -442,19 +406,20 @@
                 }
 
                 // Show share embed button if a file is successfully displayed and not in embed mode
-                if (!embedMode) {
-                    shareEmbedButton.classList.remove('hidden');
-                }
+                shareEmbedButton.classList.remove('hidden');
 
             } catch (err) {
                 if (embedMode) {
-                    fileDisplay.innerHTML = `<p class="text-red-500 font-medium p-4">Error: An unexpected issue occurred.</p>`;
+                    document.body.innerHTML = `<p style="color:red;">Error: An unexpected issue occurred.</p>`;
                 } else {
                     displayCdnMessage(`An unexpected error occurred: ${err.message}`, true);
                 }
                 console.error('Unexpected error:', err);
             } finally {
-                loader.classList.add('hidden'); // Ensure loader is hidden after attempt
+                // In non-embed mode, ensure loader is hidden. In embed mode, redirect would have happened.
+                if (!embedMode) {
+                    loader.classList.add('hidden');
+                }
             }
         }
 
@@ -587,17 +552,6 @@
 
         // --- Main execution for CDN view ---
         document.addEventListener('DOMContentLoaded', () => {
-            if (embedMode) {
-                document.body.classList.add('is-embedded');
-                // The main content wrapper also needs to be adjusted
-                // We dynamically added 'main-container' class to the wrapper.
-                mainContentWrapper.classList.remove('bg-white', 'rounded-lg', 'shadow-xl', 'p-8', 'max-w-2xl', 'w-full', 'text-center');
-                // Ensure the loader is always hidden if fileId is not present even in embed mode
-                if (!fileIdFromURL) {
-                    loader.classList.add('hidden');
-                }
-            }
-
             if (fileIdFromURL) {
                 fetchAndDisplayFile(fileIdFromURL);
             } else if (!embedMode) { // Only show this message if not in embed mode and no fileId
@@ -605,7 +559,8 @@
                 loader.classList.add('hidden'); // Hide loader if no fileId is present
             } else { // In embed mode but no fileId, display a specific error
                 loader.classList.add('hidden'); // Hide loader immediately
-                fileDisplay.innerHTML = '<p class="text-red-500 font-medium p-4">Error: No file specified for embedding.</p>';
+                // For embed mode with no file ID, directly modify the body
+                document.body.innerHTML = '<p style="color:red;">Error: No file specified for embedding.</p>';
             }
         });
     </script>
